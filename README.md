@@ -6,6 +6,14 @@ Catálogo de filmes e séries com pesquisa em tempo real, filtros e lista pessoa
 [![Testes](https://github.com/vinicius217/cineverse-catalogo/actions/workflows/test.yml/badge.svg)](https://github.com/vinicius217/cineverse-catalogo/actions/workflows/test.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
+## Sobre o projeto
+
+O Cineverse foi criado para oferecer uma experiência simples e visual de descoberta de filmes e séries. A aplicação permite explorar títulos recentes, pesquisar diretamente na base da OMDb, aplicar filtros por tipo e ano, consultar informações detalhadas e montar uma lista pessoal.
+
+Além da experiência de uso, o projeto demonstra a integração entre uma interface responsiva em JavaScript e um backend em Python. O servidor atua como intermediário seguro para a OMDb, mantém a chave da API fora do navegador, organiza os resultados, remove duplicidades e utiliza cache para acelerar as consultas seguintes.
+
+O projeto também conta com testes automatizados, integração contínua pelo GitHub Actions e deploy automático no Render.
+
 ## Demonstração
 
 **[Acessar o Cineverse online](https://cineverse-catalogo.onrender.com)**
