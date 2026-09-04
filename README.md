@@ -1,39 +1,99 @@
 # Cineverse
 
-Catálogo responsivo de filmes e séries desenvolvido com HTML, CSS, JavaScript e Python. Os dados são fornecidos pela OMDb e a chave fica protegida no servidor.
+Catálogo de filmes e séries com pesquisa em tempo real, filtros e lista pessoal. O front-end responsivo consome uma API própria em Python, que protege a chave e centraliza as consultas à [OMDb](https://www.omdbapi.com/).
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fvinicius217%2Fcineverse-catalogo)
+[![Aplicação online](https://img.shields.io/badge/abrir_aplicação-Cineverse-e5ff44?style=for-the-badge&logo=render&logoColor=111)](https://cineverse-catalogo.onrender.com)
+[![Testes](https://github.com/vinicius217/cineverse-catalogo/actions/workflows/test.yml/badge.svg)](https://github.com/vinicius217/cineverse-catalogo/actions/workflows/test.yml)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
-## Recursos
+## Demonstração
 
-- Catálogo paginado com centenas de títulos
-- Pesquisa direta na OMDb, filtros por tipo, gênero e ano
-- Detalhes com sinopse, gênero e nota IMDb
-- Minha lista persistente com `localStorage`
-- Skeleton loading, estados de erro e capa reserva
-- Interface responsiva e acessível
+**[Acessar o Cineverse online](https://cineverse-catalogo.onrender.com)**
+
+> O serviço usa o plano gratuito do Render. O primeiro acesso após um período de inatividade pode levar alguns segundos.
+
+## Principais recursos
+
+- Catálogo paginado de filmes e séries
+- Pesquisa direta na OMDb por título
+- Filtros por tipo, gênero e ano
+- Modal com sinopse, gênero, ano e avaliação IMDb
+- Lista pessoal persistida no navegador com `localStorage`
+- Skeleton loading, estados de erro e imagem reserva
+- Layout responsivo para desktop, tablet e celular
+- Navegação por teclado e atributos de acessibilidade
+- Cache do catálogo e dos detalhes no servidor
 - Backend Python sem dependências externas
-- Testes com o `unittest` da biblioteca padrão
 
-## Como executar
+## Tecnologias
 
-Requer Python 3.10 ou mais recente.
+| Camada | Tecnologias |
+| --- | --- |
+| Interface | HTML5, CSS3 e JavaScript |
+| Backend | Python e biblioteca padrão (`http.server`, `urllib`) |
+| Dados | OMDb API |
+| Testes | `unittest` e GitHub Actions |
+| Hospedagem | Render Blueprint |
 
-1. Copie `.env.example` para `.env`.
-2. Coloque sua chave da [OMDb](https://www.omdbapi.com/apikey.aspx):
+## Como funciona
+
+```text
+Navegador ── /api/catalog e /api/title ──> Servidor Python ──> OMDb API
+    │                                            │
+    └── interface e lista pessoal                └── cache e chave protegida
+```
+
+O navegador nunca recebe a chave da OMDb. Todas as consultas externas passam pelo backend, que também entrega os arquivos estáticos da aplicação.
+
+## Executando localmente
+
+### Pré-requisitos
+
+- Python 3.10 ou superior
+- Uma [chave gratuita da OMDb](https://www.omdbapi.com/apikey.aspx)
+
+### Instalação
+
+```bash
+git clone https://github.com/vinicius217/cineverse-catalogo.git
+cd cineverse-catalogo
+cp .env.example .env
+```
+
+No Windows PowerShell, substitua o último comando por:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Preencha o `.env`:
 
 ```env
 OMDB_API_KEY=sua_chave_aqui
 PORT=4173
 ```
 
-3. Inicie o projeto:
+Inicie o servidor:
 
 ```bash
 python server.py
 ```
 
-4. Acesse `http://localhost:4173`.
+Acesse [http://localhost:4173](http://localhost:4173).
+
+## API
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `GET` | `/api/health` | Verifica o servidor e a configuração da OMDb |
+| `GET` | `/api/catalog` | Lista, pesquisa, filtra e pagina os títulos |
+| `GET` | `/api/title/:id` | Retorna os detalhes pelo IMDb ID |
+
+Exemplo de pesquisa:
+
+```text
+/api/catalog?q=Matrix&type=Filme&page=1&pageSize=24
+```
 
 ## Testes
 
@@ -41,27 +101,34 @@ python server.py
 python -m unittest -v
 ```
 
-## Segurança
+Os mesmos testes são executados automaticamente pelo GitHub Actions a cada `push` e `pull request`.
 
-O arquivo `.env` está no `.gitignore` e nunca deve ser enviado ao GitHub. O navegador chama `/api/*`; somente o servidor conversa diretamente com a OMDb.
+## Deploy
 
-## Deploy no Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fvinicius217%2Fcineverse-catalogo)
 
-1. Envie o projeto para um repositório GitHub.
-2. No Render, crie um **Web Service** conectado ao repositório.
-3. Configure `OMDB_API_KEY` como variável de ambiente secreta.
-4. Use `python server.py` como comando inicial.
+O [`render.yaml`](render.yaml) cria o serviço web e utiliza `python server.py` como comando de inicialização. Durante a configuração, informe `OMDB_API_KEY` como variável secreta.
 
-O arquivo `render.yaml` também permite criar o serviço como Blueprint.
-
-## Estrutura
+## Estrutura do projeto
 
 ```text
-├── index.html
-├── styles.css
-├── app.js
-├── server.py
-├── poster-placeholder.svg
-├── test_server.py
-└── render.yaml
+.
+├── .github/workflows/test.yml  # Integração contínua
+├── app.js                      # Estado e interações da interface
+├── index.html                  # Estrutura da aplicação
+├── poster-placeholder.svg      # Imagem reserva
+├── render.yaml                 # Infraestrutura do Render
+├── server.py                   # API, cache e servidor estático
+├── styles.css                  # Layout e responsividade
+└── test_server.py              # Testes automatizados
 ```
+
+## Segurança
+
+- O `.env` é ignorado pelo Git e não deve ser versionado.
+- A chave da OMDb existe apenas no servidor.
+- Arquivos internos como `.env`, fontes Python e configuração do Render não são servidos publicamente.
+
+---
+
+Desenvolvido por [Vinicius Madalossi](https://github.com/vinicius217).
