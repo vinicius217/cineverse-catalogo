@@ -2,6 +2,8 @@
 
 Catálogo responsivo de filmes e séries desenvolvido com HTML, CSS, JavaScript e Python. Os dados são fornecidos pela OMDb e a chave fica protegida no servidor.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fvinicius217%2Fcineverse-catalogo)
+
 ## Recursos
 
 - Catálogo paginado com centenas de títulos
