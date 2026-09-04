@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 750" role="img" aria-label="Capa indisponível">
+  <defs>
+    <radialGradient id="glow" cx="75%" cy="20%" r="80%">
+      <stop offset="0" stop-color="#303827"/>
+      <stop offset=".55" stop-color="#15191e"/>
+      <stop offset="1" stop-color="#0d0f13"/>
+    </radialGradient>
+  </defs>
+  <rect width="500" height="750" fill="url(#glow)"/>
+  <circle cx="250" cy="345" r="72" fill="none" stroke="#e5ff44" stroke-width="4" opacity=".8"/>
+  <path d="m230 305 68 40-68 40z" fill="#e5ff44" opacity=".8"/>
+  <text x="250" y="470" fill="#f5f3ee" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" letter-spacing="5">CINEVERSE</text>
+  <text x="250" y="510" fill="#777b82" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">CAPA INDISPONÍVEL</text>
+</svg>

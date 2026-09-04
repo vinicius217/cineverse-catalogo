@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Cineverse — descubra filmes e séries para a sua próxima sessão.">
+  <title>Cineverse | Filmes e Séries</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Cineverse - início">
+      <span class="brand-mark"><span></span></span>
+      <span>CINEVERSE</span>
+    </a>
+
+    <nav class="desktop-nav" aria-label="Navegação principal">
+      <a class="active" href="#inicio">Início</a>
+      <a href="#catalogo" data-quick-filter="Filme">Filmes</a>
+      <a href="#catalogo" data-quick-filter="Série">Séries</a>
+      <a href="#minha-lista">Minha lista</a>
+    </nav>
+
+    <div class="top-actions">
+      <button class="icon-button search-toggle" aria-label="Abrir pesquisa">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+      </button>
+      <button class="avatar" aria-label="Abrir perfil">JM</button>
+      <button class="menu-button" aria-label="Abrir menu" aria-expanded="false">
+        <span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="inicio">
+      <div class="hero-backdrop" aria-hidden="true"></div>
+      <div class="hero-shade" aria-hidden="true"></div>
+
+      <div class="hero-content">
+        <p class="eyebrow"><span></span> Em destaque</p>
+        <h1>Além do<br><em>Horizonte</em></h1>
+        <div class="meta-row">
+          <span class="rating"><strong>★</strong> 8.8</span>
+          <span>2024</span>
+          <span>2h 18min</span>
+          <span class="age">14</span>
+        </div>
+        <p class="hero-description">Quando o último sinal da Terra atravessa o universo, uma astronauta precisa escolher entre a missão que pode salvar a humanidade e o caminho de volta para casa.</p>
+        <div class="hero-buttons">
+          <button class="primary-button" data-open="Além do Horizonte">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>
+            Ver detalhes
+          </button>
+          <a class="secondary-button" href="#catalogo">Explorar catálogo ↓</a>
+        </div>
+      </div>
+
+      <div class="hero-index" aria-label="Slide 1 de 4"><strong>01</strong><span></span><small>04</small></div>
+    </section>
+
+    <section class="catalog-section" id="catalogo">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow"><span></span> Curadoria da semana <small class="api-status" id="api-status">Catálogo local</small></p>
+          <h2>Descubra sua próxima história</h2>
+        </div>
+        <button class="view-all">Ver catálogo completo <span>↗</span></button>
+      </div>
+
+      <div class="filter-row" aria-label="Filtros do catálogo">
+        <button class="filter active" data-filter="Todos">Todos</button>
+        <button class="filter" data-filter="Filme">Filmes</button>
+        <button class="filter" data-filter="Série">Séries</button>
+        <button class="filter" data-filter="Drama">Drama</button>
+        <button class="filter" data-filter="Ficção">Ficção científica</button>
+        <button class="filter" data-filter="Suspense">Suspense</button>
+      </div>
+
+      <div class="advanced-filters">
+        <label>Ano
+          <select id="year-filter">
+            <option value="">Todos</option><option>2026</option><option>2025</option><option>2024</option><option>2023</option><option>2022</option><option>2021</option><option>2020</option>
+          </select>
+        </label>
+        <label>Nota mínima
+          <select id="rating-filter">
+            <option value="">Qualquer nota</option><option value="6">6+</option><option value="7">7+</option><option value="8">8+</option><option value="9">9+</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="movie-grid" id="movie-grid"></div>
+      <p class="empty-state" hidden>Nenhum título encontrado. Tente outra busca.</p>
+      <button class="load-more" id="load-more" hidden>Carregar mais</button>
+    </section>
+
+    <section class="list-section" id="minha-lista">
+      <div>
+        <p class="eyebrow"><span></span> Sua seleção</p>
+        <h2>Histórias para guardar.</h2>
+        <p>Salve os filmes e séries que chamaram sua atenção e encontre toda a sua seleção em um só lugar.</p>
+      </div>
+      <div class="saved-preview" id="saved-preview">
+        <span>＋</span>
+        <p>Sua lista ainda está vazia</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand" href="#"><span class="brand-mark"><span></span></span><span>CINEVERSE</span></a>
+    <p>Seu guia para descobrir grandes histórias.</p>
+    <span>© 2026 Cineverse</span>
+  </footer>
+
+  <div class="search-panel" aria-hidden="true">
+    <button class="search-close" aria-label="Fechar pesquisa">×</button>
+    <p>Qual título você procura?</p>
+    <form class="search-field" id="search-form" role="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+      <input id="search-input" type="search" placeholder="Busque por título ou gênero..." autocomplete="off">
+    </form>
+    <small>Pressione ENTER para ver os resultados · ESC para fechar</small>
+  </div>
+
+  <div class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <button class="modal-close" aria-label="Fechar detalhes">×</button>
+      <div class="modal-image"></div>
+      <div class="modal-content">
+        <p class="eyebrow"><span></span> Cineverse original</p>
+        <h2 id="modal-title"></h2>
+        <div class="meta-row modal-meta"></div>
+        <p class="modal-description"></p>
+        <div class="hero-buttons">
+          <button class="primary-button modal-save">＋ Adicionar à minha lista</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=10"></script>
+</body>
+</html>

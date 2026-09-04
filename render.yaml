@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: cineverse-catalogo
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python server.py
+    envVars:
+      - key: OMDB_API_KEY
+        sync: false
