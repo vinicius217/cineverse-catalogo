@@ -9,8 +9,19 @@ const loadMore = $("#load-more");
 const state = { page: 1, pageSize: 24, total: 0, q: "", type: "Todos", genre: "Todos", year: "", rating: "", loading: false };
 let movies = [], activeMovie = null, searchTimer, requestSequence = 0;
 const saved = new Set(JSON.parse(localStorage.getItem("cineverse-saved") || "[]"));
+const FALLBACK_POSTER = "poster-placeholder.svg";
 
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+const posterUrl = value => value && value !== "N/A" ? value : FALLBACK_POSTER;
+
+function setBackgroundPoster(element, source) {
+  const requested = posterUrl(source);
+  const image = new Image();
+  image.referrerPolicy = "no-referrer";
+  image.onload = () => { element.style.backgroundImage = `url("${requested.replace(/"/g, "%22")}")`; };
+  image.onerror = () => { element.style.backgroundImage = `url("${FALLBACK_POSTER}")`; };
+  image.src = requested;
+}
 
 function apiUrl() {
   const params = new URLSearchParams({ page: state.page, pageSize: state.pageSize });
@@ -54,7 +65,7 @@ async function fetchCatalog(reset = false) {
 function render() {
   grid.innerHTML = movies.map((movie, index) => `<article class="movie-card" style="animation-delay:${(index % 24) * 20}ms">
     <div class="poster" data-open="${movie.id}" tabindex="0" role="button" aria-label="Detalhes de ${escapeHtml(movie.title)}">
-      <img src="${escapeHtml(movie.image)}" alt="Capa de ${escapeHtml(movie.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='poster-placeholder.svg'">
+      <img src="${escapeHtml(posterUrl(movie.image))}" alt="Capa de ${escapeHtml(movie.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">
       <span class="card-badge">${movie.type}</span><button class="save-button ${saved.has(movie.id) ? "saved" : ""}" data-save="${movie.id}">${saved.has(movie.id) ? "✓" : "+"}</button><span class="play-hover" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg></span>
     </div><div class="card-info"><div class="card-title-row"><h3>${escapeHtml(movie.title)}</h3><span class="score"><span>★</span> ${movie.score}</span></div><p>${movie.year} · ${movie.genre}</p></div></article>`).join("");
   updateSaved();
@@ -68,7 +79,7 @@ function updateLoadMore() {
 
 function updateHero(movie) {
   if (!movie) return;
-  $(".hero-backdrop").style.backgroundImage = `url('${movie.image}')`;
+  setBackgroundPoster($(".hero-backdrop"), movie.image);
   $(".hero h1").textContent = movie.title;
   $(".hero-description").textContent = "Explore informações, avaliações e detalhes deste título.";
   $(".hero .meta-row").innerHTML = `<span>${movie.year}</span><span>${movie.type}</span><span>${movie.genre}</span>`;
@@ -80,7 +91,7 @@ async function openModal(id) {
   if (!movie) return;
   activeMovie = movie;
   $("#modal-title").textContent = movie.title;
-  $(".modal-image").style.backgroundImage = `url('${movie.image}')`;
+  setBackgroundPoster($(".modal-image"), movie.image);
   $(".modal-description").textContent = "Carregando informações…";
   $(".modal-meta").innerHTML = `<span>${movie.year}</span><span>${movie.type}</span>`;
   syncSaveButton(); modal.classList.add("open"); modal.setAttribute("aria-hidden", "false"); document.body.style.overflow = "hidden";
@@ -97,7 +108,7 @@ async function openModal(id) {
 function close(element) { element.classList.remove("open"); element.setAttribute("aria-hidden", "true"); document.body.style.overflow = ""; if (element === modal) activeMovie = null; }
 function toggleSaved(id) { saved.has(id) ? saved.delete(id) : saved.add(id); localStorage.setItem("cineverse-saved", JSON.stringify([...saved])); render(); syncSaveButton(); }
 function syncSaveButton() { if (!activeMovie) return; const button = $(".modal-save"); button.dataset.save = activeMovie.id; button.textContent = saved.has(activeMovie.id) ? "✓ Na minha lista" : "＋ Adicionar à minha lista"; }
-function updateSaved() { const box = $("#saved-preview"), items = movies.filter(movie => saved.has(movie.id)); box.className = `saved-preview${items.length ? " has-items" : ""}`; box.innerHTML = items.length ? items.slice(0, 4).map(item => `<img src="${item.image}" alt="${escapeHtml(item.title)}">`).join("") : "<span>＋</span><p>Sua lista ainda está vazia</p>"; }
+function updateSaved() { const box = $("#saved-preview"), items = movies.filter(movie => saved.has(movie.id)); box.className = `saved-preview${items.length ? " has-items" : ""}`; box.innerHTML = items.length ? items.slice(0, 4).map(item => `<img src="${escapeHtml(posterUrl(item.image))}" alt="Capa de ${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">`).join("") : "<span>＋</span><p>Sua lista ainda está vazia</p>"; }
 
 document.addEventListener("click", event => { const save = event.target.closest("[data-save]"); if (save) { event.stopPropagation(); return toggleSaved(save.dataset.save); } const open = event.target.closest("[data-open]"); if (open) openModal(open.dataset.open); });
 document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach(item => item.classList.remove("active")); button.classList.add("active"); const value = button.dataset.filter; state.type = ["Filme", "Série"].includes(value) ? value : "Todos"; state.genre = ["Todos", "Filme", "Série"].includes(value) ? "Todos" : value; fetchCatalog(true); }));

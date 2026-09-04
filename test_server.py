@@ -5,7 +5,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-from server import create_server, search_catalog
+from server import create_server, poster_url, search_catalog
 
 
 class ServerTests(unittest.TestCase):
@@ -64,6 +64,12 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], "tt3-4")
         self.assertEqual(items[0]["image"], "poster-placeholder.svg")
         self.assertTrue(all(call.kwargs["type"] == "movie" for call in mocked_omdb.call_args_list))
+
+    def test_uses_placeholder_for_missing_posters(self):
+        self.assertEqual(poster_url(None), "poster-placeholder.svg")
+        self.assertEqual(poster_url(""), "poster-placeholder.svg")
+        self.assertEqual(poster_url("N/A"), "poster-placeholder.svg")
+        self.assertEqual(poster_url("https://example.com/poster.jpg"), "https://example.com/poster.jpg")
 
 
 if __name__ == "__main__":

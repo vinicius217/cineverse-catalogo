@@ -17,6 +17,10 @@ CACHE = {"items": [], "expires": 0.0}
 DETAILS = {}
 
 
+def poster_url(value):
+    return value if value and value != "N/A" else "poster-placeholder.svg"
+
+
 def load_env(path=ROOT / ".env"):
     if not path.exists():
         return
@@ -103,7 +107,7 @@ def search_catalog(query, media_type, year, page, page_size):
         "id": item["imdbID"], "title": item.get("Title", "Sem título"),
         "type": "Filme" if item.get("Type") == "movie" else "Série",
         "genre": "Resultado da pesquisa", "year": item.get("Year", "—"),
-        "score": "—", "image": "poster-placeholder.svg" if item.get("Poster") == "N/A" else item.get("Poster"),
+        "score": "—", "image": poster_url(item.get("Poster")),
     } for item in raw_items[offset:offset + page_size]]
     total = int(responses[0].get("totalResults", 0)) if responses else 0
     return items, total
@@ -157,7 +161,7 @@ class CineverseHandler(BaseHTTPRequestHandler):
                 "genre": "Não informado" if data.get("Genre") == "N/A" else data.get("Genre"),
                 "year": data.get("Year"), "score": "—" if data.get("imdbRating") == "N/A" else data.get("imdbRating"),
                 "synopsis": "Sinopse indisponível." if data.get("Plot") == "N/A" else data.get("Plot"),
-                "image": "poster-placeholder.svg" if data.get("Poster") == "N/A" else data.get("Poster"),
+                "image": poster_url(data.get("Poster")),
             }
         self.send_json(200, DETAILS[movie_id])
 
