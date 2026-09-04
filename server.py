@@ -3,6 +3,7 @@ import mimetypes
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -15,6 +16,8 @@ SEEDS = (("star", "Ficção"), ("dark", "Suspense"), ("love", "Drama"), ("war", 
          ("last", "Drama"), ("dead", "Suspense"), ("the", "Outros"))
 CACHE = {"items": [], "expires": 0.0}
 DETAILS = {}
+MIN_YEAR = 2000
+CURRENT_YEAR = min(datetime.now().year, 2026)
 
 
 def poster_url(value):
@@ -48,10 +51,20 @@ def omdb(**params):
     return data
 
 
-def _search(task):
-    term, genre, media_type, page = task
+def release_year(value):
     try:
-        data = omdb(s=term, type=media_type, page=page)
+        return int(str(value)[:4])
+    except (TypeError, ValueError):
+        return 0
+
+
+def _search(task):
+    term, genre, media_type, year = task
+    try:
+        params = {"s": term, "type": media_type, "page": 1}
+        if year:
+            params["y"] = year
+        data = omdb(**params)
         return [dict(item, genre=genre) for item in data.get("Search", [])]
     except Exception:
         return []
@@ -60,21 +73,23 @@ def _search(task):
 def catalog():
     if CACHE["items"] and CACHE["expires"] > time.time():
         return CACHE["items"]
-    tasks = [(term, genre, media_type, page) for term, genre in SEEDS
-             for media_type in ("movie", "series") for page in range(1, 6)]
+    tasks = [(term, genre, media_type, None) for term, genre in SEEDS for media_type in ("movie", "series")]
+    tasks += [(term, genre, media_type, CURRENT_YEAR) for term, genre in SEEDS[:3] for media_type in ("movie", "series")]
     unique = {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
+    with ThreadPoolExecutor(max_workers=13) as pool:
         for results in pool.map(_search, tasks):
             for item in results:
                 movie_id = item.get("imdbID")
-                if movie_id and item.get("Poster") != "N/A" and movie_id not in unique:
+                year = release_year(item.get("Year"))
+                if movie_id and MIN_YEAR <= year <= CURRENT_YEAR and movie_id not in unique:
                     unique[movie_id] = {
                         "id": movie_id, "title": item.get("Title", "Sem título"),
                         "type": "Filme" if item.get("Type") == "movie" else "Série",
                         "genre": item["genre"], "year": item.get("Year", "—"),
                         "score": "—", "image": item["Poster"],
                     }
-    CACHE.update(items=list(unique.values()), expires=time.time() + 7 * 86400)
+    items = sorted(unique.values(), key=lambda item: (release_year(item["year"]), item["title"]), reverse=True)
+    CACHE.update(items=items, expires=time.time() + 7 * 86400)
     return CACHE["items"]
 
 
@@ -108,7 +123,8 @@ def search_catalog(query, media_type, year, page, page_size):
         "type": "Filme" if item.get("Type") == "movie" else "Série",
         "genre": "Resultado da pesquisa", "year": item.get("Year", "—"),
         "score": "—", "image": poster_url(item.get("Poster")),
-    } for item in raw_items[offset:offset + page_size]]
+    } for item in raw_items[offset:offset + page_size]
+        if MIN_YEAR <= release_year(item.get("Year")) <= CURRENT_YEAR]
     total = int(responses[0].get("totalResults", 0)) if responses else 0
     return items, total
 
@@ -139,6 +155,7 @@ class CineverseHandler(BaseHTTPRequestHandler):
     def catalog_route(self, query):
         value = lambda key, default="": query.get(key, [default])[0]
         q, media_type, genre, year = value("q").lower(), value("type", "Todos"), value("genre", "Todos"), value("year")
+        order = value("order", "recent")
         page = max(1, int(value("page", "1")))
         page_size = min(48, max(1, int(value("pageSize", "24"))))
         if q:
@@ -149,6 +166,8 @@ class CineverseHandler(BaseHTTPRequestHandler):
                  and (media_type == "Todos" or item["type"] == media_type)
                  and (genre == "Todos" or item["genre"] == genre)
                  and (not year or item["year"].startswith(year))]
+        if order == "title":
+            items.sort(key=lambda item: item["title"].casefold())
         start = (page - 1) * page_size
         self.send_json(200, {"items": items[start:start + page_size], "total": len(items), "page": page, "pageSize": page_size})
 

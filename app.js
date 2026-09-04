@@ -6,16 +6,17 @@ const searchInput = $("#search-input");
 const searchForm = $("#search-form");
 const status = $("#api-status");
 const loadMore = $("#load-more");
-const state = { page: 1, pageSize: 24, total: 0, q: "", type: "Todos", genre: "Todos", year: "", rating: "", loading: false };
+const state = { page: 1, pageSize: 24, total: 0, q: "", type: "Todos", genre: "Todos", year: "", order: "recent", loading: false };
 let movies = [], activeMovie = null, searchTimer, requestSequence = 0;
 const saved = new Set(JSON.parse(localStorage.getItem("cineverse-saved") || "[]"));
 const FALLBACK_POSTER = "poster-placeholder.svg";
 
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const posterUrl = value => value && value !== "N/A" ? value : FALLBACK_POSTER;
+const highResolutionPoster = value => posterUrl(value).replace(/\._V1_[^.]+(?=\.jpg(?:\?|$))/i, "._V1_SX1400");
 
 function setBackgroundPoster(element, source) {
-  const requested = posterUrl(source);
+  const requested = highResolutionPoster(source);
   const image = new Image();
   image.referrerPolicy = "no-referrer";
   image.onload = () => { element.style.backgroundImage = `url("${requested.replace(/"/g, "%22")}")`; };
@@ -25,10 +26,9 @@ function setBackgroundPoster(element, source) {
 
 function apiUrl() {
   const params = new URLSearchParams({ page: state.page, pageSize: state.pageSize });
-  for (const key of ["q", "year"]) if (state[key]) params.set(key, state[key]);
+  for (const key of ["q", "year", "order"]) if (state[key]) params.set(key, state[key]);
   if (state.type !== "Todos") params.set("type", state.type);
   if (state.genre !== "Todos") params.set("genre", state.genre);
-  if (state.rating) params.set("minRating", state.rating);
   return `/api/catalog?${params}`;
 }
 
@@ -114,7 +114,13 @@ document.addEventListener("click", event => { const save = event.target.closest(
 document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach(item => item.classList.remove("active")); button.classList.add("active"); const value = button.dataset.filter; state.type = ["Filme", "Série"].includes(value) ? value : "Todos"; state.genre = ["Todos", "Filme", "Série"].includes(value) ? "Todos" : value; fetchCatalog(true); }));
 document.querySelectorAll("[data-quick-filter]").forEach(link => link.addEventListener("click", () => document.querySelector(`.filter[data-filter="${link.dataset.quickFilter}"]`)?.click()));
 $("#year-filter").addEventListener("change", event => { state.year = event.target.value; fetchCatalog(true); });
-$("#rating-filter").addEventListener("change", event => { state.rating = event.target.value; fetchCatalog(true); });
+$("#order-filter").addEventListener("change", event => { state.order = event.target.value; fetchCatalog(true); });
+$("#clear-filters").addEventListener("click", () => {
+  state.type = "Todos"; state.genre = "Todos"; state.year = ""; state.order = "recent";
+  document.querySelectorAll(".filter").forEach(item => item.classList.toggle("active", item.dataset.filter === "Todos"));
+  $("#year-filter").value = ""; $("#order-filter").value = "recent";
+  fetchCatalog(true);
+});
 searchInput.addEventListener("input", event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = event.target.value.trim(); fetchCatalog(true); }, 450); });
 searchForm.addEventListener("submit", event => {
   event.preventDefault();
@@ -130,4 +136,6 @@ $(".search-close").addEventListener("click", () => close(searchPanel)); $(".moda
 modal.addEventListener("click", event => { if (event.target === modal) close(modal); });
 document.addEventListener("keydown", event => { if (event.key === "Escape") { close(searchPanel); close(modal); } if (event.key === "Enter" && event.target.matches(".poster")) openModal(event.target.dataset.open); });
 $(".menu-button").addEventListener("click", event => { $(".desktop-nav").classList.toggle("mobile-open"); event.currentTarget.setAttribute("aria-expanded", $(".desktop-nav").classList.contains("mobile-open")); });
+const yearFilter = $("#year-filter");
+for (let year = Math.min(new Date().getFullYear(), 2026); year >= 2000; year--) yearFilter.add(new Option(year, year));
 fetchCatalog(true);

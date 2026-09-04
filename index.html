@@ -31,7 +31,9 @@
       <button class="icon-button search-toggle" aria-label="Abrir pesquisa">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
       </button>
-      <button class="avatar" aria-label="Perfil de Vinicius Madalossi">VM</button>
+      <button class="avatar" aria-label="Abrir perfil">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.25"></circle><path d="M5.5 19c.7-3.4 3-5.2 6.5-5.2s5.8 1.8 6.5 5.2"></path></svg>
+      </button>
       <button class="menu-button" aria-label="Abrir menu" aria-expanded="false">
         <span></span><span></span>
       </button>
@@ -83,15 +85,20 @@
         <button class="filter" data-filter="Suspense">Suspense</button>
       </div>
 
-      <div class="advanced-filters">
-        <label>Ano
+      <div class="advanced-filters" aria-label="Filtros avançados">
+        <div class="filter-caption">
+          <span>Refine sua busca</span>
+          <button id="clear-filters" type="button">Limpar filtros</button>
+        </div>
+        <label><span>Ano de lançamento</span>
           <select id="year-filter">
-            <option value="">Todos</option><option>2026</option><option>2025</option><option>2024</option><option>2023</option><option>2022</option><option>2021</option><option>2020</option>
+            <option value="">Todos os anos</option>
           </select>
         </label>
-        <label>Nota mínima
-          <select id="rating-filter">
-            <option value="">Qualquer nota</option><option value="6">6+</option><option value="7">7+</option><option value="8">8+</option><option value="9">9+</option>
+        <label><span>Ordenar por</span>
+          <select id="order-filter">
+            <option value="recent">Mais recentes</option>
+            <option value="title">Título A–Z</option>
           </select>
         </label>
       </div>

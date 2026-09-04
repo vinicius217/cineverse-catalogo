@@ -5,7 +5,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-from server import create_server, poster_url, search_catalog
+from server import create_server, poster_url, release_year, search_catalog
 
 
 class ServerTests(unittest.TestCase):
@@ -70,6 +70,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(poster_url(""), "poster-placeholder.svg")
         self.assertEqual(poster_url("N/A"), "poster-placeholder.svg")
         self.assertEqual(poster_url("https://example.com/poster.jpg"), "https://example.com/poster.jpg")
+
+    def test_extracts_release_year(self):
+        self.assertEqual(release_year("2024"), 2024)
+        self.assertEqual(release_year("2022–2025"), 2022)
+        self.assertEqual(release_year("N/A"), 0)
 
 
 if __name__ == "__main__":
