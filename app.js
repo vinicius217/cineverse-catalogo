@@ -9,6 +9,8 @@ const loadMore = $("#load-more");
 const state = { page: 1, pageSize: 24, total: 0, q: "", type: "Todos", genre: "Todos", year: "", order: "recent", loading: false };
 let movies = [], activeMovie = null, searchTimer, requestSequence = 0;
 const saved = new Set(JSON.parse(localStorage.getItem("cineverse-saved") || "[]"));
+const savedItems = new Map(JSON.parse(localStorage.getItem("cineverse-saved-items") || "[]").map(item => [item.id, item]));
+savedItems.forEach((_, id) => saved.add(id));
 const FALLBACK_POSTER = "poster-placeholder.svg";
 
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -63,6 +65,8 @@ async function fetchCatalog(reset = false) {
 }
 
 function render() {
+  movies.filter(movie => saved.has(movie.id)).forEach(movie => savedItems.set(movie.id, movie));
+  persistSaved();
   grid.innerHTML = movies.map((movie, index) => `<article class="movie-card" style="animation-delay:${(index % 24) * 20}ms">
     <div class="poster" data-open="${movie.id}" tabindex="0" role="button" aria-label="Detalhes de ${escapeHtml(movie.title)}">
       <img src="${escapeHtml(posterUrl(movie.image))}" alt="Capa de ${escapeHtml(movie.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">
@@ -87,7 +91,7 @@ function updateHero(movie) {
 }
 
 async function openModal(id) {
-  const movie = movies.find(item => item.id === id);
+  const movie = movies.find(item => item.id === id) || savedItems.get(id);
   if (!movie) return;
   activeMovie = movie;
   $("#modal-title").textContent = movie.title;
@@ -106,21 +110,53 @@ async function openModal(id) {
 }
 
 function close(element) { element.classList.remove("open"); element.setAttribute("aria-hidden", "true"); document.body.style.overflow = ""; if (element === modal) activeMovie = null; }
-function toggleSaved(id) { saved.has(id) ? saved.delete(id) : saved.add(id); localStorage.setItem("cineverse-saved", JSON.stringify([...saved])); render(); syncSaveButton(); }
+function persistSaved() {
+  localStorage.setItem("cineverse-saved", JSON.stringify([...saved]));
+  localStorage.setItem("cineverse-saved-items", JSON.stringify([...savedItems.values()]));
+}
+function toggleSaved(id) {
+  if (saved.has(id)) { saved.delete(id); savedItems.delete(id); }
+  else {
+    saved.add(id);
+    const movie = movies.find(item => item.id === id) || activeMovie;
+    if (movie) savedItems.set(id, { ...movie });
+  }
+  persistSaved(); render(); syncSaveButton();
+}
 function syncSaveButton() { if (!activeMovie) return; const button = $(".modal-save"); button.dataset.save = activeMovie.id; button.textContent = saved.has(activeMovie.id) ? "✓ Na minha lista" : "＋ Adicionar à minha lista"; }
-function updateSaved() { const box = $("#saved-preview"), items = movies.filter(movie => saved.has(movie.id)); box.className = `saved-preview${items.length ? " has-items" : ""}`; box.innerHTML = items.length ? items.slice(0, 4).map(item => `<img src="${escapeHtml(posterUrl(item.image))}" alt="Capa de ${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'">`).join("") : "<span>＋</span><p>Sua lista ainda está vazia</p>"; }
+function updateSaved() {
+  const box = $("#saved-preview"), items = [...savedItems.values()];
+  box.className = `saved-preview${items.length ? " has-items" : ""}`;
+  box.innerHTML = items.length ? items.map(item => `<article class="saved-card"><div class="saved-poster" data-open="${item.id}" tabindex="0" role="button"><img src="${escapeHtml(posterUrl(item.image))}" alt="Capa de ${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${FALLBACK_POSTER}'"><button data-save="${item.id}" aria-label="Remover ${escapeHtml(item.title)} da lista">×</button></div><h3>${escapeHtml(item.title)}</h3><p>${item.year} · ${item.type}</p></article>`).join("") : "<span>＋</span><p>Sua lista ainda está vazia</p>";
+}
 
-document.addEventListener("click", event => { const save = event.target.closest("[data-save]"); if (save) { event.stopPropagation(); return toggleSaved(save.dataset.save); } const open = event.target.closest("[data-open]"); if (open) openModal(open.dataset.open); });
-document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach(item => item.classList.remove("active")); button.classList.add("active"); const value = button.dataset.filter; state.type = ["Filme", "Série"].includes(value) ? value : "Todos"; state.genre = ["Todos", "Filme", "Série"].includes(value) ? "Todos" : value; fetchCatalog(true); }));
-document.querySelectorAll("[data-quick-filter]").forEach(link => link.addEventListener("click", () => document.querySelector(`.filter[data-filter="${link.dataset.quickFilter}"]`)?.click()));
-$("#year-filter").addEventListener("change", event => { state.year = event.target.value; fetchCatalog(true); });
-$("#order-filter").addEventListener("change", event => { state.order = event.target.value; fetchCatalog(true); });
-$("#clear-filters").addEventListener("click", () => {
+function resetFilters() {
   state.type = "Todos"; state.genre = "Todos"; state.year = ""; state.order = "recent";
   document.querySelectorAll(".filter").forEach(item => item.classList.toggle("active", item.dataset.filter === "Todos"));
   $("#year-filter").value = ""; $("#order-filter").value = "recent";
+}
+
+function showView(view) {
+  const listOpen = view === "list";
+  document.body.classList.toggle("list-view", listOpen);
+  document.querySelectorAll(".desktop-nav a").forEach(link => link.classList.toggle("active", listOpen ? link.hasAttribute("data-list-view") : link.getAttribute("href") === "#inicio"));
+  $(".desktop-nav").classList.remove("mobile-open");
+  updateSaved();
+}
+
+document.addEventListener("click", event => { const save = event.target.closest("[data-save]"); if (save) { event.stopPropagation(); return toggleSaved(save.dataset.save); } const open = event.target.closest("[data-open]"); if (open) openModal(open.dataset.open); });
+document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach(item => item.classList.remove("active")); button.classList.add("active"); const value = button.dataset.filter; state.type = ["Filme", "Série"].includes(value) ? value : "Todos"; state.genre = ["Todos", "Filme", "Série"].includes(value) ? "Todos" : value; fetchCatalog(true); }));
+document.querySelectorAll("[data-quick-filter]").forEach(link => link.addEventListener("click", () => { showView("home"); document.querySelector(`.filter[data-filter="${link.dataset.quickFilter}"]`)?.click(); }));
+$("#year-filter").addEventListener("change", event => { state.year = event.target.value; fetchCatalog(true); });
+$("#order-filter").addEventListener("change", event => { state.order = event.target.value; fetchCatalog(true); });
+$("#clear-filters").addEventListener("click", () => {
+  resetFilters();
   fetchCatalog(true);
 });
+$("#view-all").addEventListener("click", () => { resetFilters(); state.pageSize = 48; fetchCatalog(true); $("#catalogo").scrollIntoView({ behavior: "smooth" }); });
+document.querySelectorAll("[data-home]").forEach(link => link.addEventListener("click", () => showView("home")));
+document.querySelector("[data-list-view]").addEventListener("click", () => showView("list"));
+window.addEventListener("hashchange", () => showView(location.hash === "#minha-lista" ? "list" : "home"));
 searchInput.addEventListener("input", event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = event.target.value.trim(); fetchCatalog(true); }, 450); });
 searchForm.addEventListener("submit", event => {
   event.preventDefault();
@@ -138,4 +174,5 @@ document.addEventListener("keydown", event => { if (event.key === "Escape") { cl
 $(".menu-button").addEventListener("click", event => { $(".desktop-nav").classList.toggle("mobile-open"); event.currentTarget.setAttribute("aria-expanded", $(".desktop-nav").classList.contains("mobile-open")); });
 const yearFilter = $("#year-filter");
 for (let year = Math.min(new Date().getFullYear(), 2026); year >= 2000; year--) yearFilter.add(new Option(year, year));
+showView(location.hash === "#minha-lista" ? "list" : "home");
 fetchCatalog(true);

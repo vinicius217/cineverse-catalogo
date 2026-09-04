@@ -15,6 +15,7 @@ SEEDS = (("star", "Ficção"), ("dark", "Suspense"), ("love", "Drama"), ("war", 
          ("life", "Drama"), ("world", "Aventura"), ("night", "Suspense"),
          ("last", "Drama"), ("dead", "Suspense"), ("the", "Outros"))
 CACHE = {"items": [], "expires": 0.0}
+YEAR_CACHE = {}
 DETAILS = {}
 MIN_YEAR = 2000
 CURRENT_YEAR = min(datetime.now().year, 2026)
@@ -59,9 +60,9 @@ def release_year(value):
 
 
 def _search(task):
-    term, genre, media_type, year = task
+    term, genre, media_type, year, page = task
     try:
-        params = {"s": term, "type": media_type, "page": 1}
+        params = {"s": term, "type": media_type, "page": page}
         if year:
             params["y"] = year
         data = omdb(**params)
@@ -73,8 +74,8 @@ def _search(task):
 def catalog():
     if CACHE["items"] and CACHE["expires"] > time.time():
         return CACHE["items"]
-    tasks = [(term, genre, media_type, None) for term, genre in SEEDS for media_type in ("movie", "series")]
-    tasks += [(term, genre, media_type, CURRENT_YEAR) for term, genre in SEEDS[:3] for media_type in ("movie", "series")]
+    tasks = [(term, genre, media_type, None, 1) for term, genre in SEEDS for media_type in ("movie", "series")]
+    tasks += [(term, genre, media_type, CURRENT_YEAR, 1) for term, genre in SEEDS[:3] for media_type in ("movie", "series")]
     unique = {}
     with ThreadPoolExecutor(max_workers=13) as pool:
         for results in pool.map(_search, tasks):
@@ -91,6 +92,30 @@ def catalog():
     items = sorted(unique.values(), key=lambda item: (release_year(item["year"]), item["title"]), reverse=True)
     CACHE.update(items=items, expires=time.time() + 7 * 86400)
     return CACHE["items"]
+
+
+def catalog_by_year(year, media_type="Todos"):
+    cache_key = (year, media_type)
+    cached = YEAR_CACHE.get(cache_key)
+    if cached and cached["expires"] > time.time():
+        return cached["items"]
+    types = (("movie",) if media_type == "Filme" else ("series",) if media_type == "Série" else ("movie", "series"))
+    tasks = [(term, genre, kind, year, page) for term, genre in SEEDS for kind in types for page in (1, 2)]
+    unique = {}
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        for results in pool.map(_search, tasks):
+            for item in results:
+                movie_id = item.get("imdbID")
+                if movie_id and release_year(item.get("Year")) == int(year) and movie_id not in unique:
+                    unique[movie_id] = {
+                        "id": movie_id, "title": item.get("Title", "Sem título"),
+                        "type": "Filme" if item.get("Type") == "movie" else "Série",
+                        "genre": item["genre"], "year": item.get("Year", "—"),
+                        "score": "—", "image": poster_url(item.get("Poster")),
+                    }
+    items = sorted(unique.values(), key=lambda item: item["title"].casefold())
+    YEAR_CACHE[cache_key] = {"items": items, "expires": time.time() + 86400}
+    return items
 
 
 def search_catalog(query, media_type, year, page, page_size):
@@ -161,7 +186,8 @@ class CineverseHandler(BaseHTTPRequestHandler):
         if q:
             items, total = search_catalog(q, media_type, year, page, page_size)
             return self.send_json(200, {"items": items, "total": total, "page": page, "pageSize": page_size})
-        items = [item for item in catalog()
+        source = catalog_by_year(year, media_type) if year else catalog()
+        items = [item for item in source
                  if (not q or q in f'{item["title"]} {item["genre"]}'.lower())
                  and (media_type == "Todos" or item["type"] == media_type)
                  and (genre == "Todos" or item["genre"] == genre)

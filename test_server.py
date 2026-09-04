@@ -5,7 +5,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-from server import create_server, poster_url, release_year, search_catalog
+from server import catalog_by_year, create_server, poster_url, release_year, search_catalog
 
 
 class ServerTests(unittest.TestCase):
@@ -75,6 +75,16 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(release_year("2024"), 2024)
         self.assertEqual(release_year("2022–2025"), 2022)
         self.assertEqual(release_year("N/A"), 0)
+
+    @patch("server._search")
+    def test_builds_a_deduplicated_catalog_for_a_year(self, mocked_search):
+        mocked_search.return_value = [
+            {"imdbID": "tt2026", "Title": "Novo filme", "Type": "movie", "Year": "2026", "Poster": "N/A", "genre": "Drama"},
+            {"imdbID": "ttold", "Title": "Filme antigo", "Type": "movie", "Year": "1999", "Poster": "N/A", "genre": "Drama"},
+        ]
+        items = catalog_by_year("2026", "Filme")
+        self.assertEqual([item["id"] for item in items], ["tt2026"])
+        self.assertEqual(len(mocked_search.call_args_list), 20)
 
 
 if __name__ == "__main__":

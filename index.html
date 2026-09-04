@@ -15,16 +15,16 @@
   <div class="ambient ambient-two"></div>
 
   <header class="topbar">
-    <a class="brand" href="#" aria-label="Cineverse - início">
+    <a class="brand" href="#inicio" data-home aria-label="Cineverse - início">
       <span class="brand-mark"><span></span></span>
       <span>CINEVERSE</span>
     </a>
 
     <nav class="desktop-nav" aria-label="Navegação principal">
-      <a class="active" href="#inicio">Início</a>
+      <a class="active" href="#inicio" data-home>Início</a>
       <a href="#catalogo" data-quick-filter="Filme">Filmes</a>
       <a href="#catalogo" data-quick-filter="Série">Séries</a>
-      <a href="#minha-lista">Minha lista</a>
+      <a href="#minha-lista" data-list-view>Minha lista</a>
     </nav>
 
     <div class="top-actions">
@@ -73,7 +73,7 @@
           <p class="eyebrow"><span></span> Curadoria da semana <small class="api-status" id="api-status">Catálogo local</small></p>
           <h2>Descubra sua próxima história</h2>
         </div>
-        <button class="view-all">Ver catálogo completo <span>↗</span></button>
+        <button class="view-all" id="view-all">Ver catálogo completo <span>↗</span></button>
       </div>
 
       <div class="filter-row" aria-label="Filtros do catálogo">
@@ -122,7 +122,7 @@
   </main>
 
   <footer>
-    <a class="brand" href="#"><span class="brand-mark"><span></span></span><span>CINEVERSE</span></a>
+    <a class="brand" href="#inicio" data-home><span class="brand-mark"><span></span></span><span>CINEVERSE</span></a>
     <p>Seu guia para descobrir grandes histórias.</p>
     <span>© 2026 Cineverse</span>
   </footer>
