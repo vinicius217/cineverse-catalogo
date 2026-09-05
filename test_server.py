@@ -1,14 +1,25 @@
 import json
 import threading
+import tempfile
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 
-from server import catalog_by_year, create_server, poster_url, release_year, search_catalog
+import library
+
+from server import catalog, catalog_by_year, create_server, poster_url, release_year, search_catalog
 
 
 class ServerTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        cache_patch = patch("library.STORE", library.DiskCache(Path(temporary.name) / "cache.sqlite3"))
+        cache_patch.start()
+        self.addCleanup(cache_patch.stop)
+
     @classmethod
     def setUpClass(cls):
         cls.server = create_server("127.0.0.1", 0)
@@ -75,6 +86,49 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(release_year("2024"), 2024)
         self.assertEqual(release_year("2022–2025"), 2022)
         self.assertEqual(release_year("N/A"), 0)
+
+    @patch("server.CACHE", {"items": [], "expires": 0})
+    @patch("server._search")
+    def test_catalog_handles_missing_posters_and_prioritizes_covers(self, search):
+        search.return_value = [
+            {"imdbID": "tt1", "Title": "Missing", "Type": "movie", "Year": "2026", "genre": "Drama"},
+            {"imdbID": "tt2", "Title": "Cover", "Type": "movie", "Year": "2024", "genre": "Drama", "Poster": "https://example.com/poster.jpg"},
+        ]
+        items = catalog()
+        self.assertEqual([item["id"] for item in items], ["tt2", "tt1"])
+        self.assertEqual(items[1]["image"], "poster-placeholder.svg")
+        catalog()
+        calls_after_load = search.call_count
+        catalog()
+        self.assertEqual(search.call_count, calls_after_load)
+
+    @patch("server.CACHE", {"items": [], "expires": 0})
+    @patch("server._search")
+    def test_catalog_covers_2000_through_2026(self, search):
+        def results(task):
+            _, genre, kind, year, _ = task
+            return [{"imdbID": f"tt{year}-{kind}", "Title": "Title", "Type": kind,
+                     "Year": str(year or 1999), "genre": genre, "Poster": "N/A"}]
+        search.side_effect = results
+        items = catalog()
+        self.assertEqual({int(item["year"]) for item in items}, set(range(2000, 2027)))
+        self.assertEqual(len(items), 54)
+        self.assertEqual({item["type"] for item in items}, {"Filme", "Série"})
+
+    @patch("server.CACHE", {"items": [], "expires": 0})
+    @patch("server._search", return_value=[])
+    def test_reports_unavailable_catalog_instead_of_empty_success(self, search):
+        with self.assertRaises(RuntimeError):
+            catalog()
+
+    @patch("server.omdb")
+    def test_search_keeps_classic_titles(self, omdb):
+        omdb.return_value = {"totalResults": "1", "Search": [
+            {"imdbID": "tt0133093", "Title": "The Matrix", "Type": "movie", "Year": "1999", "Poster": "N/A"}
+        ]}
+        items, total = search_catalog("matrix", "Todos", "", 1, 10)
+        self.assertEqual(items[0]["year"], "1999")
+        self.assertEqual(total, 1)
 
     @patch("server._search")
     def test_builds_a_deduplicated_catalog_for_a_year(self, mocked_search):

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -28,7 +28,7 @@
     </nav>
 
     <div class="top-actions">
-      <button class="icon-button search-toggle" aria-label="Abrir pesquisa">
+      <button class="icon-button search-toggle" aria-label="Ir para pesquisa">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
       </button>
       <button class="avatar" aria-label="Abrir perfil">
@@ -41,22 +41,20 @@
   </header>
 
   <main>
-    <section class="hero" id="inicio">
+    <section class="hero" id="inicio" aria-roledescription="carrossel" aria-label="Filmes e séries em destaque">
+      <div class="hero-backdrop" aria-hidden="true"></div>
       <div class="hero-backdrop" aria-hidden="true"></div>
       <div class="hero-shade" aria-hidden="true"></div>
 
       <div class="hero-content">
         <p class="eyebrow"><span></span> Em destaque</p>
-        <h1>Além do<br><em>Horizonte</em></h1>
+        <h1>Sua próxima história</h1>
         <div class="meta-row">
-          <span class="rating"><strong>★</strong> 8.8</span>
-          <span>2024</span>
-          <span>2h 18min</span>
-          <span class="age">14</span>
+          <span>Filmes e séries · 2000–2026</span>
         </div>
-        <p class="hero-description">Quando o último sinal da Terra atravessa o universo, uma astronauta precisa escolher entre a missão que pode salvar a humanidade e o caminho de volta para casa.</p>
+        <p class="hero-description">Redescubra favoritos e encontre novas histórias para a sua próxima sessão.</p>
         <div class="hero-buttons">
-          <button class="primary-button" data-open="Além do Horizonte">
+          <button class="primary-button" data-open="" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>
             Ver detalhes
           </button>
@@ -64,17 +62,32 @@
         </div>
       </div>
 
-      <div class="hero-index" aria-label="Slide 1 de 4"><strong>01</strong><span></span><small>04</small></div>
+      <div class="hero-controls" hidden>
+        <button id="hero-prev" aria-label="Destaque anterior">←</button>
+        <span id="hero-count">01 / 01</span>
+        <button id="hero-next" aria-label="Próximo destaque">→</button>
+        <button id="hero-pause" aria-label="Pausar destaques" aria-pressed="false">Pausar</button>
+      </div>
     </section>
 
     <section class="catalog-section" id="catalogo">
       <div class="section-heading">
         <div>
-          <p class="eyebrow"><span></span> Curadoria da semana <small class="api-status" id="api-status">Catálogo local</small></p>
+          <p class="eyebrow"><span></span> Curadoria da semana <small class="api-status" id="api-status" role="status">Catálogo local</small></p>
           <h2>Descubra sua próxima história</h2>
         </div>
         <button class="view-all" id="view-all">Ver catálogo completo <span>↗</span></button>
       </div>
+
+      <form class="search-field" id="search-form" role="search">
+        <label class="sr-only" for="search-input">Pesquisar filmes e séries</label>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+        <input id="search-input" type="search" placeholder="Título, drama, séries de 2024…" autocomplete="off" aria-describedby="search-help" aria-controls="movie-grid">
+        <button type="submit">Buscar</button>
+      </form>
+      <p class="search-help" id="search-help">Busque por título ou combine tipo, gênero e ano. Os resultados aparecem aqui.</p>
+      <p id="search-summary" role="status" aria-live="polite"></p>
+      <div id="search-suggestions" class="search-suggestions" aria-label="Sugestões de títulos" hidden></div>
 
       <div class="filter-row" aria-label="Filtros do catálogo">
         <button class="filter active" data-filter="Todos">Todos</button>
@@ -83,6 +96,9 @@
         <button class="filter" data-filter="Drama">Drama</button>
         <button class="filter" data-filter="Ficção">Ficção científica</button>
         <button class="filter" data-filter="Suspense">Suspense</button>
+        <button class="filter" data-filter="Ação">Ação</button>
+        <button class="filter" data-filter="Comédia">Comédia</button>
+        <button class="filter" data-filter="Animação">Animação</button>
       </div>
 
       <div class="advanced-filters" aria-label="Filtros avançados">
@@ -92,11 +108,13 @@
         </div>
         <label><span>Ano de lançamento</span>
           <select id="year-filter">
-            <option value="">Todos os anos</option>
+            <option value="">2000 a 2026</option>
           </select>
         </label>
         <label><span>Ordenar por</span>
           <select id="order-filter">
+            <option value="popular">Populares</option>
+            <option value="rating">Mais bem avaliados</option>
             <option value="recent">Mais recentes</option>
             <option value="title">Título A–Z</option>
           </select>
@@ -126,26 +144,21 @@
     <p>Seu guia para descobrir grandes histórias.</p>
     <span>© 2026 Cineverse</span>
   </footer>
-
-  <div class="search-panel" aria-hidden="true">
-    <button class="search-close" aria-label="Fechar pesquisa">×</button>
-    <p>Qual título você procura?</p>
-    <form class="search-field" id="search-form" role="search">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-      <input id="search-input" type="search" placeholder="Busque por título ou gênero..." autocomplete="off">
-    </form>
-    <small>Pressione ENTER para ver os resultados · ESC para fechar</small>
-  </div>
+  <section class="data-credit" aria-label="Créditos dos dados">
+    <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer"><img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" width="82" height="11" loading="lazy"></a>
+    <p>Dados: TMDB e OMDb. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+  </section>
 
   <div class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-card">
       <button class="modal-close" aria-label="Fechar detalhes">×</button>
       <div class="modal-image"></div>
       <div class="modal-content">
-        <p class="eyebrow"><span></span> Cineverse original</p>
+        <p class="eyebrow"><span></span> Sobre o título</p>
         <h2 id="modal-title"></h2>
         <div class="meta-row modal-meta"></div>
         <p class="modal-description"></p>
+        <dl class="modal-facts"></dl>
         <div class="hero-buttons">
           <button class="primary-button modal-save">＋ Adicionar à minha lista</button>
         </div>
@@ -153,6 +166,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

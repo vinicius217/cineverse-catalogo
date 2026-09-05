@@ -5,6 +5,7 @@ services:
     plan: free
     buildCommand: ""
     startCommand: python server.py
+    healthCheckPath: /api/health
     envVars:
       - key: OMDB_API_KEY
         sync: false

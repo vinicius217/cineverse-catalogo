@@ -2,10 +2,12 @@ import json
 import mimetypes
 import os
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import urlopen
 
@@ -17,8 +19,9 @@ SEEDS = (("star", "Ficção"), ("dark", "Suspense"), ("love", "Drama"), ("war", 
 CACHE = {"items": [], "expires": 0.0}
 YEAR_CACHE = {}
 DETAILS = {}
+CATALOG_LOCK = Lock()
 MIN_YEAR = 2000
-CURRENT_YEAR = min(datetime.now().year, 2026)
+CURRENT_YEAR = 2026
 
 
 def poster_url(value):
@@ -39,16 +42,28 @@ def load_env(path=ROOT / ".env"):
 
 load_env()
 
+import library
+
 
 def omdb(**params):
     key = os.getenv("OMDB_API_KEY", "").strip()
     if not key:
         raise RuntimeError("Configure OMDB_API_KEY no arquivo .env")
-    query = urlencode({"apikey": key, **params})
+    return cached_omdb(key, tuple(sorted(params.items())), int(time.time() // 3600))
+
+
+@lru_cache(maxsize=256)
+def cached_omdb(key, params, time_bucket):
+    cache_key = "omdb:v1:" + urlencode(params)
+    cached = library.STORE.get(cache_key)
+    if cached is not None:
+        return cached
+    query = urlencode({"apikey": key, **dict(params)})
     with urlopen(f"{OMDB_URL}?{query}", timeout=15) as response:
         data = json.load(response)
     if data.get("Response") == "False":
         raise RuntimeError(data.get("Error", "Erro ao consultar a OMDb"))
+    library.STORE.put(cache_key, data, 7 * 86400)
     return data
 
 
@@ -72,10 +87,23 @@ def _search(task):
 
 
 def catalog():
+    with CATALOG_LOCK:
+        if not CACHE["items"]:
+            cached = library.STORE.get("omdb:catalog:v2")
+            if cached:
+                CACHE.update(items=cached, expires=time.time() + 3600)
+        items = build_catalog()
+        return items
+
+
+def build_catalog():
     if CACHE["items"] and CACHE["expires"] > time.time():
         return CACHE["items"]
     tasks = [(term, genre, media_type, None, 1) for term, genre in SEEDS for media_type in ("movie", "series")]
-    tasks += [(term, genre, media_type, CURRENT_YEAR, 1) for term, genre in SEEDS[:3] for media_type in ("movie", "series")]
+    # Include every year instead of relying only on broad searches for recent titles.
+    tasks += [("love", "Drama", media_type, year, 1)
+              for year in range(MIN_YEAR, CURRENT_YEAR + 1)
+              for media_type in ("movie", "series")]
     unique = {}
     with ThreadPoolExecutor(max_workers=13) as pool:
         for results in pool.map(_search, tasks):
@@ -87,10 +115,15 @@ def catalog():
                         "id": movie_id, "title": item.get("Title", "Sem título"),
                         "type": "Filme" if item.get("Type") == "movie" else "Série",
                         "genre": item["genre"], "year": item.get("Year", "—"),
-                        "score": "—", "image": item["Poster"],
+                        "score": "—", "image": poster_url(item.get("Poster")),
                     }
-    items = sorted(unique.values(), key=lambda item: (release_year(item["year"]), item["title"]), reverse=True)
+    items = sorted(unique.values(), key=lambda item: (item["image"] != "poster-placeholder.svg", release_year(item["year"]), item["title"]), reverse=True)
+    if not items:
+        if CACHE["items"]:
+            return CACHE["items"]
+        raise RuntimeError("Catálogo indisponível. Verifique a conexão e a configuração da OMDb.")
     CACHE.update(items=items, expires=time.time() + 7 * 86400)
+    library.STORE.put("omdb:catalog:v2", items, 7 * 86400)
     return CACHE["items"]
 
 
@@ -148,8 +181,7 @@ def search_catalog(query, media_type, year, page, page_size):
         "type": "Filme" if item.get("Type") == "movie" else "Série",
         "genre": "Resultado da pesquisa", "year": item.get("Year", "—"),
         "score": "—", "image": poster_url(item.get("Poster")),
-    } for item in raw_items[offset:offset + page_size]
-        if MIN_YEAR <= release_year(item.get("Year")) <= CURRENT_YEAR]
+    } for item in raw_items[offset:offset + page_size]]
     total = int(responses[0].get("totalResults", 0)) if responses else 0
     return items, total
 
@@ -168,36 +200,55 @@ class CineverseHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/health":
-                return self.send_json(200, {"ok": True, "configured": bool(os.getenv("OMDB_API_KEY", "").strip())})
+                return self.send_json(200, {"ok": True, "configured": library.configured() or bool(os.getenv("OMDB_API_KEY", "").strip()),
+                                            "provider": "TMDB" if library.configured() else "OMDb",
+                                            "version": "2026.09.catalog-v3", "commit": os.getenv("RENDER_GIT_COMMIT", "local")})
             if parsed.path == "/api/catalog":
                 return self.catalog_route(parse_qs(parsed.query))
             if parsed.path.startswith("/api/title/"):
                 return self.title_route(parsed.path.rsplit("/", 1)[-1])
             return self.static_file(parsed.path)
-        except Exception as error:
-            self.send_json(500, {"error": str(error)})
+        except ValueError:
+            self.send_json(400, {"error": "Parâmetros inválidos."})
+        except Exception:
+            self.send_json(503, {"error": "Catálogo indisponível. Tente novamente em instantes."})
 
     def catalog_route(self, query):
+        if library.configured():
+            return self.send_json(200, library.catalog_response(query))
         value = lambda key, default="": query.get(key, [default])[0]
         q, media_type, genre, year = value("q").lower(), value("type", "Todos"), value("genre", "Todos"), value("year")
+        q, interpreted = library.interpret_query(q, CACHE["items"]) if q else (q, {})
+        media_type = interpreted.get("type", media_type)
+        genre = interpreted.get("genre", genre)
+        year = interpreted.get("year", year)
         order = value("order", "recent")
         page = max(1, int(value("page", "1")))
         page_size = min(48, max(1, int(value("pageSize", "24"))))
-        if q:
+        if q and genre == "Todos":
             items, total = search_catalog(q, media_type, year, page, page_size)
             return self.send_json(200, {"items": items, "total": total, "page": page, "pageSize": page_size})
         source = catalog_by_year(year, media_type) if year else catalog()
         items = [item for item in source
-                 if (not q or q in f'{item["title"]} {item["genre"]}'.lower())
+                 if (not q or normalize(q) in normalize(f'{item["title"]} {item["genre"]}'))
                  and (media_type == "Todos" or item["type"] == media_type)
                  and (genre == "Todos" or item["genre"] == genre)
                  and (not year or item["year"].startswith(year))]
         if order == "title":
             items.sort(key=lambda item: item["title"].casefold())
         start = (page - 1) * page_size
-        self.send_json(200, {"items": items[start:start + page_size], "total": len(items), "page": page, "pageSize": page_size})
+        featured = []
+        if not q and not year:
+            for kind in ("Filme", "Série"):
+                candidates = [item for item in source if item["type"] == kind and item["image"] != "poster-placeholder.svg"]
+                # Spread highlights across the catalog's years and keep both formats.
+                indexes = sorted({round(index * (len(candidates) - 1) / 3) for index in range(4)}) if candidates else []
+                featured.extend(candidates[index] for index in indexes)
+        self.send_json(200, {"items": items[start:start + page_size], "total": len(items), "page": page, "pageSize": page_size, "featured": featured})
 
     def title_route(self, movie_id):
+        if movie_id.startswith("tmdb-"):
+            return self.send_json(200, library.details(movie_id))
         if movie_id not in DETAILS:
             data = omdb(i=movie_id, plot="full")
             DETAILS[movie_id] = {
@@ -207,14 +258,17 @@ class CineverseHandler(BaseHTTPRequestHandler):
                 "year": data.get("Year"), "score": "—" if data.get("imdbRating") == "N/A" else data.get("imdbRating"),
                 "synopsis": "Sinopse indisponível." if data.get("Plot") == "N/A" else data.get("Plot"),
                 "image": poster_url(data.get("Poster")),
+                "runtime": data.get("Runtime", "Não informada"),
+                "cast": [] if data.get("Actors") in (None, "N/A") else data["Actors"].split(", "),
+                "ratingSource": "IMDb", "source": "OMDb",
             }
         self.send_json(200, DETAILS[movie_id])
 
     def static_file(self, request_path):
         relative = "index.html" if request_path == "/" else request_path.lstrip("/")
         file_path = (ROOT / relative).resolve()
-        blocked = ((ROOT not in file_path.parents and file_path != ROOT) or relative.startswith(".")
-                   or file_path.suffix in {".py", ".json", ".yaml", ".yml"})
+        public_files = {"index.html", "app.js", "styles.css", "poster-placeholder.svg"}
+        blocked = ROOT not in file_path.parents or relative not in public_files
         if blocked:
             self.send_error(403)
             return
@@ -231,6 +285,11 @@ class CineverseHandler(BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass
+
+
+def normalize(value):
+    return "".join(char for char in unicodedata.normalize("NFD", value.casefold())
+                   if not unicodedata.combining(char))
 
 
 def create_server(host="0.0.0.0", port=None):
