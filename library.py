@@ -1,5 +1,6 @@
 """Localized catalog, search and restart-safe provider cache."""
 import json
+import heapq
 import os
 import re
 import sqlite3
@@ -7,6 +8,7 @@ import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import date, timedelta
 from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Lock
@@ -15,6 +17,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 MIN_YEAR, MAX_YEAR = 2000, 2026
+MIN_RATING_VOTES = 100
 GENRES = {28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime",
           99: "Documentário", 18: "Drama", 10751: "Família", 14: "Fantasia", 36: "História",
           27: "Terror", 10402: "Música", 9648: "Mistério", 10749: "Romance", 878: "Ficção",
@@ -154,6 +157,74 @@ def catalog():
         return items
 
 
+def catalog_by_year(year, media_type="Todos", genre="Todos", order="popular", page=1, size=24):
+    """Merge provider pages lazily instead of downloading an entire year."""
+    year = int(year)
+    if not MIN_YEAR <= year <= MAX_YEAR:
+        raise ValueError("Ano inválido.")
+    kinds = ("movie",) if media_type == "Filme" else ("tv",) if media_type == "Série" else ("movie", "tv")
+
+    def discover(kind, start, end):
+        field = "primary_release_date" if kind == "movie" else "first_air_date"
+        sort = "vote_average.desc" if order == "rating" else "popularity.desc"
+        if order == "title":
+            sort = "title.asc" if kind == "movie" else "name.asc"
+        params = {f"{field}.gte": start.isoformat(), f"{field}.lte": end.isoformat(),
+                  "sort_by": sort, "include_adult": "false"}
+        if order == "rating":
+            params["vote_count.gte"] = MIN_RATING_VOTES
+        if genre != "Todos":
+            params["with_genres"] = "|".join(str(identifier) for identifier, name in GENRES.items() if name == genre) or "0"
+        first = tmdb(f"discover/{kind}", page=1, **params)
+        if int(first.get("total_pages", 1)) > 500:
+            if start == end:
+                raise RuntimeError("Limite de resultados do provedor atingido.")
+            middle = start + (end - start) // 2
+            return discover(kind, start, middle) + discover(kind, middle + timedelta(days=1), end)
+        return [(kind, params, first)]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        batches = list(pool.map(lambda kind: discover(kind, date(year, 1, 1), date(year, 12, 31)), kinds))
+    streams = [stream for batch in batches for stream in batch]
+    total = sum(int(first.get("total_results", len(first.get("results", [])))) for _, _, first in streams)
+    start = (page - 1) * size
+    if start >= total:
+        return [], total
+
+    def results(kind, params, first):
+        yield from first.get("results", [])
+        for number in range(2, int(first.get("total_pages", 1)) + 1):
+            yield from tmdb(f"discover/{kind}", page=number, **params).get("results", [])
+
+    def sort_key(item):
+        if order == "title":
+            return normalize(item.get("title") or item.get("name") or "")
+        return -(item.get("vote_average" if order == "rating" else "popularity") or 0)
+
+    heap, iterators = [], []
+    for index, (kind, params, first) in enumerate(streams):
+        iterator = results(kind, params, first)
+        iterators.append(iterator)
+        item = next(iterator, None)
+        if item is not None:
+            heapq.heappush(heap, (sort_key(item), index, item))
+    selected, seen, count = [], set(), 0
+    while heap and count < start + size:
+        _, index, raw = heapq.heappop(heap)
+        item = as_movie(raw, streams[index][0])
+        if item["year"] == str(year) and item["id"] not in seen:
+            seen.add(item["id"])
+            if count >= start:
+                selected.append(item)
+            count += 1
+        if count < start + size:
+            following = next(iterators[index], None)
+            if following is not None:
+                heapq.heappush(heap, (sort_key(following), index, following))
+    return selected, total
+
+
+
 def titles(movie):
     return {normalize(movie["title"]), normalize(movie.get("originalTitle", ""))} - {""}
 
@@ -217,11 +288,16 @@ def catalog_response(query):
     value = lambda key, default="": query.get(key, [default])[0]
     page = max(1, int(value("page", "1")))
     size = min(48, max(1, int(value("pageSize", "24"))))
-    local = catalog()
+    local = [] if value("year") and not value("q").strip() else catalog()
     q, interpreted = interpret_query(value("q").strip()[:160], local)
     kind = interpreted.get("type", value("type", "Todos"))
     genre = interpreted.get("genre", value("genre", "Todos"))
     year = interpreted.get("year", value("year"))
+    if year and not q:
+        items, total = catalog_by_year(year, kind, genre, value("order", "popular"), page, size)
+        return {"items": items, "total": total, "page": page, "pageSize": size,
+                "featured": [], "source": "TMDB", "suggestions": [], "correction": "",
+                "interpreted": interpreted, "searchLimited": False}
     items, suggestions, correction = search(q, local) if q else (local, [], "")
     items = [item for item in items if (kind == "Todos" or item["type"] == kind)
              and (genre == "Todos" or genre in item["genres"]) and (not year or item["year"] == year)]
@@ -231,7 +307,7 @@ def catalog_response(query):
     elif order == "recent":
         items.sort(key=lambda item: (item["year"], item["popularity"]), reverse=True)
     elif order == "rating":
-        items = [item for item in items if item["votes"] >= 50]
+        items = [item for item in items if item["votes"] >= MIN_RATING_VOTES]
         items.sort(key=lambda item: (float(item["score"] if item["score"] != "—" else 0), item["votes"]), reverse=True)
     elif not q:
         items.sort(key=lambda item: item["popularity"], reverse=True)

@@ -73,9 +73,81 @@ class LibraryTests(unittest.TestCase):
         response = library.catalog_response({"order": ["rating"], "pageSize": ["1"]})
         self.assertEqual(response["total"], 2)
         self.assertEqual(len(response["items"]), 1)
-        response = library.catalog_response({"q": ["séries de drama de 2020"]})
+        self.assertEqual(response["items"][0]["id"], "tmdb-movie-1")
+        with patch("library.catalog_by_year", return_value=([catalog.return_value[2]], 1)) as yearly:
+            response = library.catalog_response({"q": ["séries de drama de 2020"]})
+            yearly.assert_called_once_with("2020", "Série", "Drama", "popular", 1, 24)
         self.assertEqual(response["total"], 1)
         self.assertEqual(response["items"][0]["type"], "Série")
+
+    @patch("library.tmdb")
+    def test_year_loads_only_needed_pages(self, api):
+        def response(path, **params):
+            self.assertNotIn("vote_count.gte", params)
+            page = params["page"]
+            return {"total_pages": 400, "total_results": 8000, "results": [
+                {"id": i, "title": f"Movie {i}", "release_date": "2010-01-01",
+                 "vote_count": 0, "popularity": 8000 - i}
+                for i in range((page - 1) * 20, page * 20)]}
+        api.side_effect = response
+        first, total = library.catalog_by_year("2010", "Filme")
+        self.assertEqual(total, 8000)
+        self.assertEqual(len(first), 24)
+        self.assertEqual(api.call_count, 2)
+        second, _ = library.catalog_by_year("2010", "Filme", page=2)
+        self.assertEqual(len(second), 24)
+        self.assertFalse({item["id"] for item in first} & {item["id"] for item in second})
+        self.assertEqual(second[0]["id"], "tmdb-movie-24")
+        self.assertTrue(all(item["votes"] == 0 for item in second))
+
+    @patch("library.tmdb")
+    def test_large_year_splits_date_ranges_without_loading_all_pages(self, api):
+        def response(path, **params):
+            start, end = params["primary_release_date.gte"], params["primary_release_date.lte"]
+            if start == "2010-01-01" and end == "2010-12-31":
+                return {"total_pages": 501, "total_results": 10020, "results": []}
+            return {"total_pages": 300, "total_results": 6000, "results": [
+                {"id": int(start.replace("-", "")), "release_date": start}]}
+        api.side_effect = response
+        items, total = library.catalog_by_year("2010", "Filme", size=1)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(total, 12000)
+        self.assertEqual(api.call_count, 3)
+
+    @patch("library.catalog")
+    @patch("library.tmdb")
+    def test_year_route_paginates_without_loading_catalog(self, api, catalog):
+        api.return_value = {"total_pages": 1, "total_results": 1, "results": [
+            {"id": 1, "release_date": "2010-01-01", "vote_count": 100}]}
+        response = library.catalog_response({"year": ["2010"], "type": ["Filme"],
+                                             "genre": ["Drama"], "order": ["rating"]})
+        self.assertEqual(response["total"], 1)
+        self.assertEqual(response["items"][0]["votes"], 100)
+        self.assertEqual(api.call_args.kwargs["with_genres"], "18")
+        self.assertEqual(api.call_args.kwargs["sort_by"], "vote_average.desc")
+        self.assertEqual(api.call_args.kwargs["vote_count.gte"], 100)
+        catalog.assert_not_called()
+
+    @patch("library.catalog")
+    def test_rating_excludes_small_samples_and_accepts_threshold(self, catalog):
+        items = [movie(i) for i in range(4)]
+        for item, votes, score in zip(items, [2, 99, 100, 5000], [10, 9.9, 8, 9]):
+            item.update(votes=votes, score=score)
+        catalog.return_value = items
+        response = library.catalog_response({"order": ["rating"]})
+        self.assertEqual([item["id"] for item in response["items"]], ["tmdb-movie-3", "tmdb-movie-2"])
+
+    @patch("library.tmdb")
+    def test_year_merges_movies_and_series_by_popularity(self, api):
+        def response(path, **params):
+            popularity = 10 if path.endswith("movie") else 20
+            return {"total_pages": 1, "total_results": 1, "results": [
+                {"id": 1, "release_date": "2010-01-01", "first_air_date": "2010-01-01",
+                 "popularity": popularity}]}
+        api.side_effect = response
+        items, total = library.catalog_by_year("2010")
+        self.assertEqual(total, 2)
+        self.assertEqual([item["id"] for item in items], ["tmdb-tv-1", "tmdb-movie-1"])
 
     @patch("library.tmdb")
     def test_details_include_runtime_cast_and_localized_synopsis(self, api):

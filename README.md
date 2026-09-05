@@ -29,7 +29,7 @@ O projeto também conta com testes automatizados, integração contínua pelo Gi
 - Pesquisa na própria página, com reconhecimento de tipo, gênero e ano (ex.: `séries de 2024`)
 - Filtros por tipo, gênero e ano
 - Modal com sinopse em português, elenco, duração, temporadas e avaliação identificada por fonte
-- Gêneros reais, ordenação por popularidade e por nota (mínimo de 50 votos)
+- Gêneros reais, ordenação por popularidade e por nota (mínimo de 100 votos, inclusive ao filtrar por ano)
 - Sugestões por semelhança de títulos e fundos horizontais do TMDB
 - Lista pessoal persistida no navegador com `localStorage`
 - Skeleton loading, estados de erro e imagem reserva
@@ -103,6 +103,8 @@ Com `TMDB_API_KEY` (ou `TMDB_ACCESS_TOKEN`) configurada, a aplicação usa o TMD
 Sem TMDB, a OMDb continua disponível, com seus limites: textos geralmente em inglês, capas verticais e curadoria por palavras aproximada. Configurar uma chave inválida do TMDB gera um erro recuperável, sem trocar silenciosamente os identificadores dos títulos salvos.
 
 ### Cache em disco
+
+O filtro de ano consulta o TMDB por páginas, sem baixar o ano inteiro antes de mostrar os primeiros resultados. O botão “Carregar mais” continua a seleção, respeitando tipo, gênero e ordenação. Anos que ultrapassam o limite de páginas do provedor são divididos em intervalos de datas. Títulos sem votos aparecem nas demais ordenações; “Mais bem avaliados” exige pelo menos 100 votos e ordena pela maior nota.
 
 Respostas dos provedores e a seleção ficam em SQLite, em `.cache/catalog.sqlite3`, fora do Git e sem acesso público. O cache sobrevive a reinícios do processo enquanto o disco permanece disponível. O catálogo TMDB expira em 24 horas; respostas de metadados, em sete dias; buscas, em uma hora. Dados anteriores podem ser usados em caso de falha do provedor.
 
