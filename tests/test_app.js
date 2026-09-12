@@ -24,26 +24,31 @@ const context = vm.createContext({
     }
   }
 });
-const source = fs.readFileSync('app.js', 'utf8');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../frontend/app.js'), 'utf8');
 vm.runInContext(source.slice(0, source.indexOf('function apiUrl()')), context);
 vm.runInContext(source.slice(source.indexOf('async function updateHero('), source.indexOf('async function openModal(')), context);
 const run = code => vm.runInContext(code, context);
 
 (async () => {
-  const markup = run(`posterMarkup({title: '<Lost>', type: 'Filme', year: '2026', image: 'N/A'})`);
-  assert.match(markup, /no-cover/);
-  assert.match(markup, /&lt;Lost&gt;/);
-  assert.doesNotMatch(markup, /<img/);
+  context.fetch = async (url, options) => {
+    assert.equal(url, '/api/example');
+    assert.equal(options.signal, 'signal');
+    return { ok: true, json: async () => ({ total: 3 }) };
+  };
+  assert.equal((await run("request('/api/example', {signal: 'signal'})")).total, 3);
+  context.fetch = async () => ({ ok: false, json: async () => ({ error: 'Unavailable' }) });
+  await assert.rejects(run("request('/api/example')"), /Unavailable/);
   const original = 'https://m.media-amazon.com/images/M/example._V1_SX300.jpg';
   assert.equal(await run(`heroPoster('${original}')`), original);
   assert.ok(requests.some(url => url.includes('SX1280')));
   run(`hero.items = [
-    {id:'1', title:'First', image:'/good.jpg'},
+    {id:'1', title:'First', image:'/good.jpg', html:{heroMeta:'<span>2026</span>'}},
     {id:'2', title:'Broken', image:'/broken.jpg'},
     {id:'3', title:'Third', image:'/third.jpg'}
   ]`);
   await run('updateHero(0)');
   assert.equal(nodes.get('.hero h1').textContent, 'First');
+  assert.equal(nodes.get('.hero .meta-row').innerHTML, '<span>2026</span>');
   await run('updateHero(1)');
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.get('.hero h1').textContent, 'Third');

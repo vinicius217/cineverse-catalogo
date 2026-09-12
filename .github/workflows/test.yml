@@ -11,5 +11,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m unittest -v
-      - run: node --check app.js
-      - run: node test_app.js
+      - run: node --check frontend/app.js
+      - run: node tests/test_app.js

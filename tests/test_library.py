@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import library
+from backend import library
 
 
 def movie(identifier=1, title="A Origem", original="Inception", year="2010", kind="movie", genres=None):
@@ -19,7 +19,7 @@ class LibraryTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / "cache.sqlite3"
-        patcher = patch("library.STORE", library.DiskCache(self.path))
+        patcher = patch("backend.library.STORE", library.DiskCache(self.path))
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -47,7 +47,7 @@ class LibraryTests(unittest.TestCase):
                          ("", {"type": "Série", "genre": "Drama", "year": "2024"}))
         self.assertEqual(library.interpret_query("ficção científica", []), ("", {"genre": "Ficção"}))
 
-    @patch("library.tmdb", return_value={"results": []})
+    @patch("backend.library.tmdb", return_value={"results": []})
     def test_searches_portuguese_original_and_typos(self, api):
         for query in ("a origem", "Inception", "Incepton"):
             items, suggestions, correction = library.search(query, [movie()])
@@ -55,7 +55,7 @@ class LibraryTests(unittest.TestCase):
             self.assertIn("A Origem", suggestions)
         self.assertEqual(correction, "A Origem")
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_filters_people_and_dates_from_remote_search(self, api):
         api.return_value = {"results": [
             {"id": 1, "media_type": "person"},
@@ -65,7 +65,7 @@ class LibraryTests(unittest.TestCase):
         items, _, _ = library.search("Nova", [])
         self.assertEqual([item["id"] for item in items], ["tmdb-tv-3"])
 
-    @patch("library.catalog")
+    @patch("backend.library.catalog")
     def test_filters_paginate_and_rating_use_vote_threshold(self, catalog):
         weak = movie(2)
         weak.update(votes=2, score=10)
@@ -74,13 +74,13 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(response["total"], 2)
         self.assertEqual(len(response["items"]), 1)
         self.assertEqual(response["items"][0]["id"], "tmdb-movie-1")
-        with patch("library.catalog_by_year", return_value=([catalog.return_value[2]], 1)) as yearly:
+        with patch("backend.library.catalog_by_year", return_value=([catalog.return_value[2]], 1)) as yearly:
             response = library.catalog_response({"q": ["séries de drama de 2020"]})
             yearly.assert_called_once_with("2020", "Série", "Drama", "popular", 1, 24)
         self.assertEqual(response["total"], 1)
         self.assertEqual(response["items"][0]["type"], "Série")
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_year_loads_only_needed_pages(self, api):
         def response(path, **params):
             self.assertNotIn("vote_count.gte", params)
@@ -100,7 +100,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(second[0]["id"], "tmdb-movie-24")
         self.assertTrue(all(item["votes"] == 0 for item in second))
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_large_year_splits_date_ranges_without_loading_all_pages(self, api):
         def response(path, **params):
             start, end = params["primary_release_date.gte"], params["primary_release_date.lte"]
@@ -114,8 +114,8 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(total, 12000)
         self.assertEqual(api.call_count, 3)
 
-    @patch("library.catalog")
-    @patch("library.tmdb")
+    @patch("backend.library.catalog")
+    @patch("backend.library.tmdb")
     def test_year_route_paginates_without_loading_catalog(self, api, catalog):
         api.return_value = {"total_pages": 1, "total_results": 1, "results": [
             {"id": 1, "release_date": "2010-01-01", "vote_count": 100}]}
@@ -128,7 +128,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(api.call_args.kwargs["vote_count.gte"], 100)
         catalog.assert_not_called()
 
-    @patch("library.catalog")
+    @patch("backend.library.catalog")
     def test_rating_excludes_small_samples_and_accepts_threshold(self, catalog):
         items = [movie(i) for i in range(4)]
         for item, votes, score in zip(items, [2, 99, 100, 5000], [10, 9.9, 8, 9]):
@@ -137,7 +137,7 @@ class LibraryTests(unittest.TestCase):
         response = library.catalog_response({"order": ["rating"]})
         self.assertEqual([item["id"] for item in response["items"]], ["tmdb-movie-3", "tmdb-movie-2"])
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_year_merges_movies_and_series_by_popularity(self, api):
         def response(path, **params):
             popularity = 10 if path.endswith("movie") else 20
@@ -149,7 +149,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(total, 2)
         self.assertEqual([item["id"] for item in items], ["tmdb-tv-1", "tmdb-movie-1"])
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_details_include_runtime_cast_and_localized_synopsis(self, api):
         api.return_value = {"id": 1, "title": "A Origem", "release_date": "2010-07-01", "runtime": 148,
                             "overview": "Uma aventura dentro dos sonhos.", "credits": {"cast": [{"name": "Ator"}]},
@@ -161,7 +161,7 @@ class LibraryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             library.details("../secrets")
 
-    @patch("library.tmdb")
+    @patch("backend.library.tmdb")
     def test_catalog_covers_every_year_and_reuses_disk(self, api):
         def response(path, **params):
             year = params.get("primary_release_date.gte", params.get("first_air_date.gte"))[:4]

@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-MIN_YEAR, MAX_YEAR = 2000, 2026
+from .config import ROOT, MIN_YEAR, CURRENT_YEAR as MAX_YEAR
 MIN_RATING_VOTES = 100
 GENRES = {28: "Ação", 12: "Aventura", 16: "Animação", 35: "Comédia", 80: "Crime",
           99: "Documentário", 18: "Drama", 10751: "Família", 14: "Fantasia", 36: "História",
@@ -29,7 +29,7 @@ CATALOG_LOCK = Lock()
 
 class DiskCache:
     def __init__(self, path=None):
-        self.path = Path(path or os.getenv("CATALOG_CACHE_PATH", Path(__file__).parent / ".cache" / "catalog.sqlite3"))
+        self.path = Path(path or os.getenv("CATALOG_CACHE_PATH", ROOT / ".cache" / "catalog.sqlite3"))
 
     @contextmanager
     def connect(self):
@@ -201,26 +201,22 @@ def catalog_by_year(year, media_type="Todos", genre="Todos", order="popular", pa
             return normalize(item.get("title") or item.get("name") or "")
         return -(item.get("vote_average" if order == "rating" else "popularity") or 0)
 
-    heap, iterators = [], []
-    for index, (kind, params, first) in enumerate(streams):
-        iterator = results(kind, params, first)
-        iterators.append(iterator)
-        item = next(iterator, None)
-        if item is not None:
-            heapq.heappush(heap, (sort_key(item), index, item))
+    def stream(kind, params, first):
+        for raw in results(kind, params, first):
+            yield raw, kind
+
+    merged = heapq.merge(*(stream(*batch) for batch in streams), key=lambda pair: sort_key(pair[0]))
     selected, seen, count = [], set(), 0
-    while heap and count < start + size:
-        _, index, raw = heapq.heappop(heap)
-        item = as_movie(raw, streams[index][0])
-        if item["year"] == str(year) and item["id"] not in seen:
-            seen.add(item["id"])
-            if count >= start:
-                selected.append(item)
-            count += 1
-        if count < start + size:
-            following = next(iterators[index], None)
-            if following is not None:
-                heapq.heappush(heap, (sort_key(following), index, following))
+    for raw, kind in merged:
+        item = as_movie(raw, kind)
+        if item["year"] != str(year) or item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        if count >= start:
+            selected.append(item)
+        count += 1
+        if count == start + size:
+            break
     return selected, total
 
 

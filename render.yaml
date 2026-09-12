@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: ""
-    startCommand: python server.py
+    startCommand: python -m backend.server
     healthCheckPath: /api/health
     envVars:
       - key: OMDB_API_KEY

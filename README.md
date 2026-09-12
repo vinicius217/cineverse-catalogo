@@ -48,6 +48,20 @@ O projeto também conta com testes automatizados, integração contínua pelo Gi
 | Testes | `unittest` e GitHub Actions |
 | Hospedagem | Render Blueprint |
 
+O backend utiliza exclusivamente Python, sem Node.js ou dependências de npm para executar a aplicação:
+
+- `backend/server.py`: servidor HTTP, rotas da API e entrega dos arquivos da interface.
+- `backend/config.py`: caminhos, limites de ano e carregamento das variáveis do `.env`.
+- `backend/omdb.py`: consultas, catálogo, pesquisa, filtros e detalhes da OMDb.
+- `backend/library.py`: consultas ao TMDB, pesquisa, filtros e cache compartilhado em SQLite.
+- `backend/presentation.py`: gera o HTML das capas, cards, destaques, sugestões e detalhes, escapando os dados dos provedores.
+- `frontend/app.js`: JavaScript executado apenas no navegador, responsável pela interface e pelas chamadas à API Python.
+- `tests/test_app.js`: testes da interface executados com Node.js, opcional para desenvolvimento; não faz parte do backend.
+
+Para iniciar a aplicação completa, execute `python -m backend.server`. O Python fica no backend; o navegador utiliza HTML, CSS e JavaScript.
+
+A API retorna os dados junto com fragmentos HTML gerados em Python. O frontend insere esses fragmentos e controla as interações (pesquisa sem recarregar, paginação, modal, carrossel e lista local). As opções de ano também são geradas pelo servidor. A lista pessoal continua no navegador, e listas salvas pela versão anterior recuperam os fragmentos pela API. A página ainda precisa de JavaScript para carregar o catálogo e suas interações.
+
 ## Como funciona
 
 ```text
@@ -91,7 +105,7 @@ PORT=4173
 Inicie o servidor:
 
 ```bash
-python server.py
+python -m backend.server
 ```
 
 Acesse [http://localhost:4173](http://localhost:4173).
@@ -128,7 +142,7 @@ Exemplo de pesquisa:
 
 ```bash
 python -m unittest -v
-node test_app.js
+node tests/test_app.js
 ```
 
 O teste JavaScript usa Node.js e verifica o design sem capa, a recuperação de imagens e os controles do carrossel. Os testes Python e JavaScript são executados automaticamente pelo GitHub Actions a cada `push` e `pull request`.
@@ -137,20 +151,36 @@ O teste JavaScript usa Node.js e verifica o design sem capa, a recuperação de 
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fvinicius217%2Fcineverse-catalogo)
 
-O [`render.yaml`](render.yaml) cria o serviço web e utiliza `python server.py` como comando de inicialização. Durante a configuração, informe `TMDB_API_KEY` como variável secreta (e `OMDB_API_KEY` se desejar a alternativa). Depois de salvar as variáveis no painel do Render, reinicie/publique o serviço. O endpoint `/api/health` deve informar `provider: TMDB`.
+O [`render.yaml`](render.yaml) cria o serviço web e utiliza `python -m backend.server` como comando de inicialização. Durante a configuração, informe `TMDB_API_KEY` como variável secreta (e `OMDB_API_KEY` se desejar a alternativa). Depois de salvar as variáveis no painel do Render, reinicie/publique o serviço. O endpoint `/api/health` deve informar `provider: TMDB`.
 
 ## Estrutura do projeto
 
 ```text
 .
-├── .github/workflows/test.yml  # Integração contínua
-├── app.js                      # Estado e interações da interface
-├── index.html                  # Estrutura da aplicação
-├── poster-placeholder.svg      # Imagem reserva
-├── render.yaml                 # Infraestrutura do Render
-├── server.py                   # API, cache e servidor estático
-├── styles.css                  # Layout e responsividade
-└── test_server.py              # Testes automatizados
+|-- backend/
+|   |-- __init__.py
+|   |-- config.py
+|   |-- library.py
+|   |-- omdb.py
+|   |-- presentation.py
+|   `-- server.py
+|-- frontend/
+|   |-- app.js
+|   |-- index.html
+|   |-- poster-placeholder.svg
+|   `-- styles.css
+|-- tests/
+|   |-- __init__.py
+|   |-- test_app.js
+|   |-- test_library.py
+|   |-- test_omdb.py
+|   |-- test_presentation.py
+|   `-- test_server.py
+|-- .github/workflows/test.yml
+|-- .env.example
+|-- .gitignore
+|-- README.md
+`-- render.yaml
 ```
 
 ## Segurança

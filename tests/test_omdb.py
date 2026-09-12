@@ -1,59 +1,22 @@
-import json
-import threading
+"""Tests for OMDb catalog behavior, independent of HTTP."""
 import tempfile
 import unittest
-from unittest.mock import patch
-from urllib.error import HTTPError
-from urllib.request import urlopen
 from pathlib import Path
+from unittest.mock import patch
 
-import library
+from backend import library
+from backend.omdb import catalog, catalog_by_year, poster_url, release_year, search_catalog
 
-from server import catalog, catalog_by_year, create_server, poster_url, release_year, search_catalog
 
-
-class ServerTests(unittest.TestCase):
+class OmdbTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        cache_patch = patch("library.STORE", library.DiskCache(Path(temporary.name) / "cache.sqlite3"))
+        cache_patch = patch("backend.library.STORE", library.DiskCache(Path(temporary.name) / "cache.sqlite3"))
         cache_patch.start()
         self.addCleanup(cache_patch.stop)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.server = create_server("127.0.0.1", 0)
-        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
-        cls.thread.start()
-        cls.base_url = f"http://127.0.0.1:{cls.server.server_port}"
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server.server_close()
-        cls.thread.join()
-
-    def test_health_does_not_expose_key(self):
-        with urlopen(f"{self.base_url}/api/health") as response:
-            data = json.load(response)
-            self.assertEqual(response.status, 200)
-            self.assertTrue(data["ok"])
-            self.assertNotIn("key", data)
-
-    def test_serves_home_page(self):
-        with urlopen(self.base_url) as response:
-            html = response.read().decode()
-            self.assertEqual(response.status, 200)
-            self.assertIn("CINEVERSE", html)
-
-    def test_blocks_private_files(self):
-        for private_file in (".env", "server.py", "render.yaml"):
-            with self.subTest(private_file=private_file), self.assertRaises(HTTPError) as context:
-                urlopen(f"{self.base_url}/{private_file}")
-            self.assertEqual(context.exception.code, 403)
-            context.exception.close()
-
-    @patch("server.omdb")
+    @patch("backend.omdb.omdb")
     def test_searches_omdb_and_paginates_results(self, mocked_omdb):
         def response(**params):
             page = params["page"]
@@ -87,8 +50,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(release_year("2022–2025"), 2022)
         self.assertEqual(release_year("N/A"), 0)
 
-    @patch("server.CACHE", {"items": [], "expires": 0})
-    @patch("server._search")
+    @patch("backend.omdb.CACHE", {"items": [], "expires": 0})
+    @patch("backend.omdb._search")
     def test_catalog_handles_missing_posters_and_prioritizes_covers(self, search):
         search.return_value = [
             {"imdbID": "tt1", "Title": "Missing", "Type": "movie", "Year": "2026", "genre": "Drama"},
@@ -102,8 +65,8 @@ class ServerTests(unittest.TestCase):
         catalog()
         self.assertEqual(search.call_count, calls_after_load)
 
-    @patch("server.CACHE", {"items": [], "expires": 0})
-    @patch("server._search")
+    @patch("backend.omdb.CACHE", {"items": [], "expires": 0})
+    @patch("backend.omdb._search")
     def test_catalog_covers_2000_through_2026(self, search):
         def results(task):
             _, genre, kind, year, _ = task
@@ -115,13 +78,13 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(len(items), 54)
         self.assertEqual({item["type"] for item in items}, {"Filme", "Série"})
 
-    @patch("server.CACHE", {"items": [], "expires": 0})
-    @patch("server._search", return_value=[])
+    @patch("backend.omdb.CACHE", {"items": [], "expires": 0})
+    @patch("backend.omdb._search", return_value=[])
     def test_reports_unavailable_catalog_instead_of_empty_success(self, search):
         with self.assertRaises(RuntimeError):
             catalog()
 
-    @patch("server.omdb")
+    @patch("backend.omdb.omdb")
     def test_search_keeps_classic_titles(self, omdb):
         omdb.return_value = {"totalResults": "1", "Search": [
             {"imdbID": "tt0133093", "Title": "The Matrix", "Type": "movie", "Year": "1999", "Poster": "N/A"}
@@ -130,7 +93,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(items[0]["year"], "1999")
         self.assertEqual(total, 1)
 
-    @patch("server._search")
+    @patch("backend.omdb._search")
     def test_builds_a_deduplicated_catalog_for_a_year(self, mocked_search):
         mocked_search.return_value = [
             {"imdbID": "tt2026", "Title": "Novo filme", "Type": "movie", "Year": "2026", "Poster": "N/A", "genre": "Drama"},
